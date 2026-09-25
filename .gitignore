@@ -1,0 +1,7 @@
+node_modules/
+workspace/
+data/
+logs/
+runs/
+config.local.json
+*.log

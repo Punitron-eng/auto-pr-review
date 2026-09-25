@@ -1,0 +1,15 @@
+{
+  "name": "auto-pr-review",
+  "version": "1.0.0",
+  "description": "Automatically reviews GitHub PRs assigned to you (or where your review is requested) using Claude Code, with OpenCode as fallback, and posts COMMENT reviews.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dry-run": "node src/index.js --dry-run",
+    "once": "node src/index.js --once",
+    "dashboard": "node src/index.js --dashboard-only"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,58 @@
+{
+  "repos": [
+    "iThink-Logistics/itl-dashboard-react"
+  ],
+  "searchQueries": [
+    "review-requested:@me",
+    "assignee:@me"
+  ],
+  "projectRulesFiles": {
+    "iThink-Logistics/itl-dashboard-react": "D:/next-itl/itl-dashboard-react/CLAUDE.md"
+  },
+  "pollIntervalMinutes": 2,
+  "concurrency": 1,
+  "reviewNewCommits": true,
+  "existingCommentsMode": "review-existing-only",
+  "maxFollowUpThreads": 30,
+  "skipDrafts": true,
+  "skipOwnPrs": true,
+  "maxAttempts": 2,
+  "reviewTimeoutMinutes": 25,
+  "maxInlineComments": 15,
+  "maxDiffChars": 200000,
+  "engineOrder": [
+    "claude",
+    "opencode"
+  ],
+  "engines": {
+    "claude": {
+      "command": "",
+      "model": "sonnet",
+      "effort": "high",
+      "maxParallel": 1,
+      "allowGitBash": true,
+      "maxBudgetUsd": 0,
+      "cooldownMinutesAfterLimit": 30
+    },
+    "opencode": {
+      "command": "",
+      "model": "",
+      "maxParallel": 1,
+      "cooldownMinutesAfterLimit": 30,
+      "disableMcp": [
+        "itl-context"
+      ]
+    }
+  },
+  "fallbackOnAnyError": true,
+  "window": {
+    "mode": "wt",
+    "tabColor": "#C00000",
+    "closeAfterSeconds": 15
+  },
+  "keepWorktrees": false,
+  "dashboard": {
+    "host": "127.0.0.1",
+    "port": 4545
+  }
+}

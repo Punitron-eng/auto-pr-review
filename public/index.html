@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auto PR Review</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2026; --muted: #667085; --line: #e4e7ec;
+    --red: #c00000; --green: #1a7f37; --amber: #b54708; --blue: #175cd3; --grey: #667085;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111317; --card: #1a1d23; --text: #e6e8eb; --muted: #98a2b3; --line: #2b3038;
+            --red: #ff5a5a; --green: #3fb950; --amber: #f5a524; --blue: #58a6ff; --grey: #98a2b3; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; border-bottom: 3px solid var(--red); background: var(--card); }
+  header h1 { margin: 0; font-size: 18px; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
+  .live { color: var(--red); } .dry { color: var(--amber); }
+  .meta { color: var(--muted); font-size: 12px; margin-left: auto; text-align: right; }
+  main { max-width: 1150px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; }
+  section h2 { margin: 0 0 10px; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; border-top: 0; }
+  a { color: var(--blue); text-decoration: none; } a:hover { text-decoration: underline; }
+  .s-done { color: var(--green); font-weight: 600; } .s-failed { color: var(--red); font-weight: 600; }
+  .s-skipped { color: var(--grey); } .s-running { color: var(--red); font-weight: 700; } .s-pending { color: var(--amber); font-weight: 600; }
+  .running-card { border-left: 4px solid var(--red); }
+  .empty { color: var(--muted); }
+  .err { color: var(--red); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .small { color: var(--muted); font-size: 12px; }
+  button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red); margin-right: 6px; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .tag { padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid currentColor; }
+  .tag.fu { color: #b45309; }
+  .tag.full { color: #2563eb; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Auto PR Review</h1>
+  <span id="mode" class="pill">...</span>
+  <button id="pollBtn" type="button">Poll now</button>
+  <div class="meta" id="meta">loading...</div>
+</header>
+<main>
+  <div class="tiles">
+    <div class="tile"><div class="n" id="c-running">-</div><div class="l">Running now</div></div>
+    <div class="tile"><div class="n" id="c-pending">-</div><div class="l">Pending (baaki)</div></div>
+    <div class="tile"><div class="n" id="c-done">-</div><div class="l">Done (ho gaye)</div></div>
+    <div class="tile"><div class="n" id="c-failed">-</div><div class="l">Failed</div></div>
+    <div class="tile"><div class="n" id="c-skipped">-</div><div class="l">Skipped</div></div>
+  </div>
+  <section class="running-card"><h2>Currently running</h2><div id="running"></div></section>
+  <section><h2>Queue</h2><div id="pending"></div></section>
+  <section><h2>Recent reviews</h2><div id="recent"></div></section>
+  <section><h2>Poller</h2><div id="poller"></div></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const t = (iso) => iso ? new Date(iso).toLocaleString() : '-';
+const ago = (iso) => {
+  if (!iso) return '-';
+  const s = Math.round((Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago';
+};
+const dur = (a, b) => { if (!a) return '-'; const s = Math.round(((b ? Date.parse(b) : Date.now()) - Date.parse(a)) / 1000); return Math.floor(s / 60) + 'm ' + (s % 60) + 's'; };
+const prLink = (p) => `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.repo.split('/')[1])} #${p.number}</a>`;
+const modeTag = (p) => p.mode === 'followup' ? '<span class="tag fu">follow-up</span>' : p.mode === 'full' ? '<span class="tag full">full review</span>' : '<span class="small">-</span>';
+const table = (head, rows) => rows.length ? `<table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">Nothing here.</div>';
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch('/api/status', { cache: 'no-store' })).json(); }
+  catch { $('meta').textContent = 'Cannot reach auto-pr-review (is it running?)'; return; }
+  $('mode').textContent = s.mode === 'live' ? 'LIVE - posts reviews' : 'DRY-RUN - nothing posted';
+  $('mode').className = 'pill ' + (s.mode === 'live' ? 'live' : 'dry');
+  $('meta').innerHTML = `GitHub: <b>${esc(s.login || '?')}</b> | repos: ${esc(s.repos.join(', '))}<br>last poll ${ago(s.lastPollAt)} | next ${s.nextPollAt ? t(s.nextPollAt) : '-'}${s.polling ? ' | polling...' : ''}`;
+  for (const k of Object.keys(s.counts)) $('c-' + k).textContent = s.counts[k];
+
+  $('running').innerHTML = table(['PR', 'Title', 'Mode', 'Engine', 'Step', 'Started', 'Elapsed'], s.running.map((p) =>
+    `<tr><td><span class="dot"></span>${prLink(p)}</td><td>${esc(p.title)}<div class="small">by ${esc(p.author)}</div></td><td>${modeTag(p)}</td><td class="s-running">${esc(p.engine || '-')}</td><td>${esc(p.step || '')}</td><td>${t(p.startedAt)}</td><td>${dur(p.startedAt)}</td></tr>`));
+
+  $('pending').innerHTML = table(['PR', 'Title', 'Why', 'Queued', 'Note'], s.pending.map((p) =>
+    `<tr><td>${prLink(p)}</td><td>${esc(p.title)}</td><td class="small">${esc((p.matchedBy || (p.manual ? ['manual'] : [])).join(', '))}</td><td>${ago(p.queuedAt)}</td><td class="small">${p.nextRetryAt ? 'retry at ' + t(p.nextRetryAt) : ''}${p.error ? `<div class="err">${esc(p.error.slice(0, 300))}</div>` : ''}</td></tr>`));
+
+  $('recent').innerHTML = table(['PR', 'Title', 'Status', 'Mode', 'Engine', 'Comments', 'Finished', 'Took', 'Result'], s.recent.map((p) => {
+    const f = p.followUp;
+    const c = f ? `${f.threads} old thread(s): ${f.addressed} fixed, ${f.partially_addressed} partial, ${f.not_addressed} open, ${f.not_applicable} n/a<div class="small">${f.replies} repl${f.replies === 1 ? 'y' : 'ies'}${p.dryRun ? ' prepared' : ' posted'}</div>`
+      : p.counts ? `${p.counts.inline} inline${p.counts.unanchored ? ` + ${p.counts.unanchored} in body` : ''}` : '-';
+    let res = '';
+    if (p.reviewUrl) res = `<a href="${esc(p.reviewUrl)}" target="_blank" rel="noopener">view review</a>`;
+    else if (p.dryRun) res = `<span class="small">dry-run, saved: ${esc(p.payloadFile || '')}</span>`;
+    if (p.skipReason) res += `<div class="small">${esc(p.skipReason)}</div>`;
+    if (p.status === 'failed' && p.error) res += `<div class="err">${esc(p.error.slice(0, 400))}</div>`;
+    return `<tr><td>${prLink(p)}</td><td>${esc(p.title)}</td><td class="s-${p.status}">${p.status}</td><td>${modeTag(p)}</td><td>${esc(p.engine || '-')}</td><td>${c}</td><td>${ago(p.finishedAt)}</td><td>${dur(p.startedAt, p.finishedAt)}</td><td>${res}</td></tr>`;
+  }));
+
+  const cds = Object.entries(s.cooldowns).filter(([, v]) => Date.parse(v) > Date.now()).map(([k, v]) => `${k} paused (limit) until ${t(v)}`);
+  $('poller').innerHTML = `<div class="small">Searches: ${esc(s.queries.join(' | '))} every ${s.pollIntervalMinutes} min. Process started ${t(s.startedAt)}.</div>`
+    + (cds.length ? `<div class="err">${esc(cds.join('; '))}</div>` : '')
+    + (s.lastPollError ? `<div class="err">Last poll error: ${esc(s.lastPollError)}</div>` : '')
+    + (s.filtered.length ? `<div class="small" style="margin-top:6px">Ignored on last poll: ${s.filtered.map((f) => `#${f.number} (${esc(f.reason)})`).join(', ')}</div>` : '');
+}
+$('pollBtn').onclick = async () => { await fetch('/api/poll', { method: 'POST' }); setTimeout(refresh, 1500); };
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
