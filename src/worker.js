@@ -99,6 +99,7 @@ export class Worker {
 
   async review(entry) {
     const { repo, number } = entry;
+    const retest = entry.retest || null; // 'verify' | 'full' - set by the dashboard's Re-test buttons
     const key = this.state.key(repo, number);
     const set = (patch) => this.state.upsert(repo, number, patch);
     set({ status: 'running', startedAt: new Date().toISOString(), finishedAt: null, engine: null, error: null, step: 'starting', mode: null, followUp: null, counts: null });
@@ -106,25 +107,46 @@ export class Worker {
     try {
       // Fresh PR data (the head may have moved since the poll).
       const pr = await gh.viewPr(repo, number);
-      if (pr.state !== 'OPEN') { set({ status: 'skipped', skipReason: `PR is ${pr.state}`, finishedAt: new Date().toISOString(), step: null }); return; }
+      if (pr.state !== 'OPEN') {
+        const st = await gh.prState(repo, number).catch(() => ({ state: pr.state }));
+        set({ status: 'skipped', skipReason: `PR is ${pr.state}`, prState: st.state, mergedAt: st.mergedAt || null, closedAt: st.closedAt || null, mergedBy: st.mergedBy || null, finishedAt: new Date().toISOString(), step: null, retest: null });
+        return;
+      }
       set({ sha: pr.headRefOid, title: pr.title, url: pr.url, author: pr.author?.login });
       const sha = pr.headRefOid;
 
-      if (await gh.hasMarkerReview(repo, number, sha)) {
+      const markers = await gh.markerReviews(repo, number);
+      if (!retest && markers.some((m) => m.sha === sha)) {
         log.info(`${key} already has an auto-pr-review for ${sha.slice(0, 7)}; skipping`);
         set({ status: 'done', reviewedSha: sha, skipReason: 'already reviewed (marker found on PR)', finishedAt: new Date().toISOString(), step: null });
         return;
       }
 
-      // ---- Full review or follow-up on existing comments? ----
-      let mode = 'full', openThreads = [];
-      if ((this.cfg.existingCommentsMode || 'review-existing-only') === 'review-existing-only') {
+      // ---- Full review, follow-up on existing comments, or re-test? ----
+      // A PR gets ONE full review. After that only its comments are followed up, so the author never gets a
+      // second batch of new comments. Another full review only happens when asked for from the dashboard.
+      let mode = 'full', threads = [];
+      const followUpOnly = (this.cfg.existingCommentsMode || 'review-existing-only') === 'review-existing-only';
+      if (retest === 'verify' || (followUpOnly && retest !== 'full')) {
         set({ step: 'checking existing review comments' });
-        const all = await gh.reviewThreads(repo, number);
-        openThreads = all.filter((t) => !t.isResolved && t.comments?.nodes?.length);
-        if (openThreads.length) mode = 'followup';
-        set({ existingThreads: { total: all.length, open: openThreads.length } });
-        log.info(`${key}: ${all.length} review thread(s), ${openThreads.length} unresolved -> ${mode === 'followup' ? 'follow-up mode' : 'full review'}`);
+        const all = (await gh.reviewThreads(repo, number)).filter((t) => t.comments?.nodes?.length);
+        const open = all.filter((t) => !t.isResolved);
+        set({ existingThreads: { total: all.length, open: open.length } });
+        const finishWithoutReview = (outcome, reason) => {
+          log.info(`${key}: ${reason}`);
+          set({ status: 'done', mode: 'none', outcome, openLeft: 0, reviewedSha: sha, skipReason: reason, finishedAt: new Date().toISOString(), step: null, retest: null });
+        };
+        if (retest === 'verify') {
+          if (!all.length) return finishWithoutReview('clean', 'nothing to re-test: the PR has no review comments');
+          mode = 'retest'; threads = all;
+        } else if (open.length) {
+          mode = 'followup'; threads = open;
+        } else if (markers.length && this.cfg.singleFullReview !== false) {
+          return finishWithoutReview(all.length ? 'all-resolved' : 'clean', all.length
+            ? `all ${all.length} review comment(s) are resolved - no new review (use Re-test on the dashboard)`
+            : 'already had its full review and nothing is open - no new review (use Re-test on the dashboard)');
+        }
+        log.info(`${key}: ${all.length} review thread(s), ${open.length} unresolved -> ${mode}`);
       }
       set({ mode });
 
@@ -144,8 +166,8 @@ export class Worker {
       const jobTitle = `${repo} #${number} - ${pr.title}`;
       const promptFile = path.join(runDir, 'prompt.md');
 
-      if (mode === 'followup') {
-        await this.followUp({ key, set, repo, number, pr, sha, runDir, worktree, co, projectRules, promptFile, jobTitle, openThreads });
+      if (mode !== 'full') {
+        await this.followUp({ key, set, repo, number, pr, sha, runDir, worktree, co, projectRules, promptFile, jobTitle, threads, retest: mode === 'retest' });
         return;
       }
 
@@ -175,10 +197,11 @@ export class Worker {
       const payloadFile = path.join(runDir, 'review-payload.json');
       fs.writeFileSync(payloadFile, JSON.stringify(payload, null, 2));
       const counts = { inline: valid.length, unanchored: invalid.length };
+      const outcomeOf = (c) => ({ outcome: c.inline + c.unanchored ? 'changes-requested' : 'clean', openLeft: c.inline + c.unanchored, retest: null });
 
       if (this.dryRun) {
         log.info(`[dry-run] ${key}: review NOT posted. ${valid.length} inline, ${invalid.length} moved to body. Payload: ${payloadFile}`);
-        set({ status: 'done', dryRun: true, reviewedSha: sha, engine: usedEngine, counts, meta: result.meta, payloadFile, reviewUrl: null, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
+        set({ status: 'done', dryRun: true, reviewedSha: sha, engine: usedEngine, counts, ...outcomeOf(counts), meta: result.meta, payloadFile, reviewUrl: null, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
         return;
       }
 
@@ -192,7 +215,7 @@ export class Worker {
       }
       if (!posted.ok) throw new Error(`Posting review failed: ${posted.error}`);
       log.info(`${key}: review posted ${posted.url}`);
-      set({ status: 'done', dryRun: false, reviewedSha: sha, engine: usedEngine, counts, meta: result.meta, reviewUrl: posted.url, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
+      set({ status: 'done', dryRun: false, reviewedSha: sha, engine: usedEngine, counts, ...outcomeOf(counts), meta: result.meta, reviewUrl: posted.url, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
     } catch (err) {
       const cur = this.state.get(repo, number);
       const n = (cur.attempts || 0) + 1;
@@ -201,19 +224,20 @@ export class Worker {
       set({
         status: retry ? 'pending' : 'failed', attempts: n, error: err.message.slice(0, 2000), step: null,
         finishedAt: new Date().toISOString(), nextRetryAt: retry ? new Date(Date.now() + 5 * 60_000).toISOString() : null,
+        ...(retry ? {} : { retest: null }),
       });
     } finally {
       if (worktree && !this.cfg.keepWorktrees) await removeWorktree(repo, worktree).catch(() => {});
     }
   }
 
-  /** Follow-up mode: judge each unresolved thread, reply in each thread, post a summary COMMENT review. */
-  async followUp({ key, set, repo, number, pr, sha, runDir, worktree, co, projectRules, promptFile, jobTitle, openThreads }) {
+  /** Follow-up / re-test: judge each thread against HEAD, reply in each thread, post a summary COMMENT review. */
+  async followUp({ key, set, repo, number, pr, sha, runDir, worktree, co, projectRules, promptFile, jobTitle, threads, retest }) {
     const max = this.cfg.maxFollowUpThreads ?? 30;
-    const items = openThreads.slice(0, max).map((t, i) => threadItem(t, i, worktree, sha));
-    const unchecked = openThreads.slice(max).map((t, i) => threadItem(t, max + i, worktree, sha));
+    const items = threads.slice(0, max).map((t, i) => threadItem(t, i, worktree, sha));
+    const unchecked = threads.slice(max).map((t, i) => threadItem(t, max + i, worktree, sha));
     fs.writeFileSync(path.join(runDir, 'threads.json'), JSON.stringify(items.map(({ snippet, ...rest }) => rest), null, 2));
-    fs.writeFileSync(promptFile, buildFollowUpPrompt({ repo, pr, threads: items, baseRef: co.baseRef, projectRules }));
+    fs.writeFileSync(promptFile, buildFollowUpPrompt({ repo, pr, threads: items, baseRef: co.baseRef, projectRules, retest }));
 
     const { result, usedEngine, attempts } = await this.runEngines({ key, set, runDir, worktree, promptFile, kind: 'followup', number, jobTitle });
     fs.writeFileSync(path.join(runDir, 'attempts.txt'), attempts.join('\n'));
@@ -234,15 +258,17 @@ export class Worker {
 
     const counts = { threads: items.length, replies: replies.length, notJudged: rows.filter((r) => !r.verdict).length, unchecked: unchecked.length };
     for (const s of FOLLOWUP_STATUSES) counts[s] = rows.filter((r) => r.verdict?.status === s).length;
+    const openLeft = counts.partially_addressed + counts.not_addressed + counts.notJudged + counts.unchecked;
+    const outcome = { outcome: openLeft ? 'open-comments' : 'all-resolved', openLeft, retest: null };
 
-    const reviewPayload = { commit_id: sha, event: 'COMMENT', body: buildFollowUpBody({ summary: result.review.summary, rows, unchecked, engine: usedEngine, sha, counts }), comments: [] };
+    const reviewPayload = { commit_id: sha, event: 'COMMENT', body: buildFollowUpBody({ summary: result.review.summary, rows, unchecked, engine: usedEngine, sha, counts, retest }), comments: [] };
     const payloadFile = path.join(runDir, 'followup-payload.json');
     fs.writeFileSync(payloadFile, JSON.stringify({ replies, review: reviewPayload }, null, 2));
     set({ step: 'posting', followUp: counts, counts: null });
 
     if (this.dryRun) {
       log.info(`[dry-run] ${key}: follow-up NOT posted. ${items.length} thread(s) checked, ${replies.length} repl(ies) prepared. Payload: ${payloadFile}`);
-      set({ status: 'done', dryRun: true, reviewedSha: sha, engine: usedEngine, meta: result.meta, payloadFile, reviewUrl: null, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
+      set({ status: 'done', dryRun: true, reviewedSha: sha, engine: usedEngine, ...outcome, meta: result.meta, payloadFile, reviewUrl: null, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
       return;
     }
 
@@ -260,7 +286,7 @@ export class Worker {
     const posted = await gh.postReview(repo, number, reviewPayload, path.join(runDir, 'followup-review-posted.json'));
     if (!posted.ok) throw new Error(`Posting follow-up summary failed (${counts.replies} thread replies were posted): ${posted.error}`);
     log.info(`${key}: follow-up posted ${posted.url} (${counts.replies} thread replies)`);
-    set({ status: 'done', dryRun: false, reviewedSha: sha, engine: usedEngine, followUp: counts, meta: result.meta, reviewUrl: posted.url, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
+    set({ status: 'done', dryRun: false, reviewedSha: sha, engine: usedEngine, followUp: counts, ...outcome, meta: result.meta, reviewUrl: posted.url, finishedAt: new Date().toISOString(), step: null, attemptsLog: attempts });
   }
 }
 
@@ -289,6 +315,7 @@ function threadItem(t, i, worktree, sha) {
     path: t.path,
     line,
     outdated,
+    resolved: !!t.isResolved,
     rootCommentId: first.databaseId,
     url: first.url,
     firstAuthor: first.author?.login || 'ghost',
@@ -308,17 +335,17 @@ function replyBody(verdict, engine, sha) {
 
 const cell = (s, n = 220) => { s = String(s ?? '').replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim(); return s.length > n ? s.slice(0, n) + '...' : s; };
 
-function buildFollowUpBody({ summary, rows, unchecked, engine, sha, counts }) {
-  let body = `### Automated follow-up on existing review comments\n\n${summary.trim()}\n\n`;
-  body += `**${counts.threads} open thread(s) checked:** ${counts.addressed} addressed, ${counts.partially_addressed} partially addressed, ${counts.not_addressed} not addressed, ${counts.not_applicable} no longer applicable${counts.notJudged ? `, ${counts.notJudged} not judged` : ''}.\n\n`;
+function buildFollowUpBody({ summary, rows, unchecked, engine, sha, counts, retest }) {
+  let body = `### Automated ${retest ? 're-test of all earlier' : 'follow-up on existing'} review comments\n\n${summary.trim()}\n\n`;
+  body += `**${counts.threads} ${retest ? '' : 'open '}thread(s) checked:** ${counts.addressed} addressed, ${counts.partially_addressed} partially addressed, ${counts.not_addressed} not addressed, ${counts.not_applicable} no longer applicable${counts.notJudged ? `, ${counts.notJudged} not judged` : ''}.\n\n`;
   body += '| # | File | Comment by | Status | Note |\n|---|---|---|---|---|\n';
   rows.forEach((r, i) => {
     const where = `[\`${cell(r.path.split('/').pop(), 60)}${r.line ? `:${r.line}` : ''}\`](${r.url})`;
     body += `| ${i + 1} | ${where} | @${cell(r.firstAuthor, 40)} | ${r.verdict ? STATUS_LABEL[r.verdict.status] : 'Not judged'} | ${r.verdict ? cell(r.verdict.explanation) : '-'} |\n`;
   });
   if (unchecked.length) body += `\n_${unchecked.length} more open thread(s) were not checked (limit \`maxFollowUpThreads\`)._\n`;
-  body += `\n---\n<sub>Generated automatically by auto-pr-review using ${engine} on ${sha.slice(0, 7)}. Only existing open threads were checked (no new full review). Nothing was resolved, approved or rejected.</sub>\n`;
-  body += `<!-- auto-pr-review sha=${sha} engine=${engine} mode=followup -->`;
+  body += `\n---\n<sub>Generated automatically by auto-pr-review using ${engine} on ${sha.slice(0, 7)}. Only existing ${retest ? '' : 'open '}threads were checked (no new full review). Nothing was resolved, approved or rejected.</sub>\n`;
+  body += `<!-- auto-pr-review sha=${sha} engine=${engine} mode=${retest ? 'retest' : 'followup'} -->`;
   return body;
 }
 

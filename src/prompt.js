@@ -46,7 +46,7 @@ ${(pr.body || '(no description)').slice(0, 4000)}
 
 ## Your environment
 - The current working directory is a checkout of the PR head commit. You may READ files for context (Read, Grep, Glob).
-- Stay focused on the changed code: use at most about 25 tool calls in total, then write your answer. Do not explore unrelated docs or folders.
+- Stay focused on the changed code: use at most about 40 tool calls in total, then write your answer. Do not explore unrelated docs or folders.
 - If allowed, you may run read-only git commands (git diff ${baseRef}...HEAD, git log, git show, git blame). Never modify files, never commit, never push, never call GitHub.
 - FIRST read the repository's CLAUDE.md (and AGENTS.md if present) in the repo root, if they exist, and apply their project rules and "lessons" as review criteria.
 ${rulesBlock}
@@ -63,15 +63,23 @@ Focus on REAL problems a careful senior engineer would block or flag:
 - Access-rights / permission checks that were dropped or use the wrong module/tab key.
 - Type-safety holes that hide bugs (\`any\`, unchecked casts, non-null assertions on possibly-missing data).
 - Leftover debug code (console.log with sensitive data, commented-out logic that changes behaviour, hard-coded test values).
-DO NOT comment on pure style, formatting, naming preferences, or import order. No praise-only comments. If the PR looks fine, return few or zero comments.
+DO NOT comment on pure style, formatting, naming preferences, or import order. No praise-only comments. If the PR looks fine, return zero comments.
+
+## This is the ONLY full review this PR will get (important)
+The tool never runs a second full review on this PR. Later runs only check whether THESE comments were fixed; they
+never raise new issues. So the author must get the COMPLETE list now, in one go:
+- Go through EVERY changed file and every hunk before answering. Do not stop after the first few findings.
+- Report every real problem you find now, including medium and low ones. Do not hold anything back for "a later round".
+- If the same problem repeats in several places, add one comment per place (or one comment listing all the lines).
+- Do not add things you are not fairly sure about just to look complete - but anything you would flag later, flag now.
 
 ## Output rules (strict)
-- Return AT MOST ${maxComments} inline comments, most important first. Quality over quantity.
+- Return every real finding, most important first, up to ${maxComments} comments. If you truly have more, merge related ones so nothing is lost.
 - Each comment must point at a line that is part of the diff below: use \`side: "RIGHT"\` and the NEW-file line number for added/context lines; use \`side: "LEFT"\` and the OLD-file line number only for removed lines.
 - \`path\` must be exactly the file path as shown in the diff (no "a/" or "b/" prefix).
 - \`severity\`: critical (will break prod / security), high (real bug), medium (likely bug or risky pattern), low (minor but worth fixing).
 - \`body\`: concise Markdown. State the problem, why it matters, and a concrete fix (a small code suggestion is welcome).
-- \`summary\`: 3-10 lines of Markdown: what the PR does, overall risk, and the top concerns. Mention anything important you could not anchor to a line.
+- \`summary\`: 3-10 lines of Markdown: what the PR does, overall risk, and the top concerns. Mention anything important you could not anchor to a line. State that this is the complete list of requested changes.
 - Your FINAL message must be ONLY a single JSON object, no prose, no code fences:
 {"summary": "...", "comments": [{"path": "...", "line": 123, "side": "RIGHT", "severity": "high", "body": "..."}]}
 
@@ -109,13 +117,13 @@ export const FOLLOWUP_SCHEMA = {
 export const FOLLOWUP_FINAL_SHAPE = '{"summary": ..., "threads": [{"id": "T1", "status": ..., "explanation": ...}]}';
 
 /** threads = [{id, path, line, outdated, originalCommit, diffHunk, comments:[{author, body}], snippet}] */
-export function buildFollowUpPrompt({ repo, pr, threads, baseRef, projectRules }) {
+export function buildFollowUpPrompt({ repo, pr, threads, baseRef, projectRules, retest = false }) {
   const rulesBlock = projectRules
     ? `\n## Project rules (team CLAUDE.md, for context only)\n"""\n${projectRules.slice(0, 12000)}\n"""\n`
     : '';
   const blocks = threads.map((t) => {
     const convo = t.comments.map((c, i) => `${i === 0 ? 'Comment' : 'Reply'} by @${c.author}:\n${c.body.replace(/<!--[\s\S]*?-->/g, '').trim().slice(0, 3000)}`).join('\n\n');
-    return `### ${t.id} - \`${t.path}\`${t.line ? ` line ${t.line}` : ''}${t.outdated ? ' (OUTDATED: the code this comment was on has changed since)' : ''}
+    return `### ${t.id} - \`${t.path}\`${t.line ? ` line ${t.line}` : ''}${t.outdated ? ' (OUTDATED: the code this comment was on has changed since)' : ''}${t.resolved ? ' (marked RESOLVED on GitHub - verify the fix really is in the code)' : ''}
 Comment was made on commit ${t.originalCommit ? t.originalCommit.slice(0, 12) : 'unknown'}. Code it was attached to at that time:
 \`\`\`diff
 ${(t.diffHunk || '(not available)').slice(-2500)}
@@ -133,8 +141,8 @@ ${t.snippet}
 You are running NON-INTERACTIVELY. Nobody will answer questions. Do not ask for anything; just check and output the JSON.
 
 The PR already has review comments. Do NOT do a new full review and do NOT raise new issues.
-Your only job: for each open review thread below, decide whether the CURRENT code at HEAD addresses it.
-
+Your only job: for each ${retest ? '' : 'open '}review thread below, decide whether the CURRENT code at HEAD addresses it.
+${retest ? 'This is a RE-TEST requested by the reviewer: every earlier thread is included, also the ones marked resolved, to confirm the fixes are real.\n' : ''}
 ## Pull request
 - Repository: ${repo}
 - PR #${pr.number}: ${pr.title}
@@ -161,7 +169,7 @@ ${rulesBlock}
 - Your FINAL message must be ONLY a single JSON object, no prose, no code fences:
 ${FOLLOWUP_FINAL_SHAPE}
 
-## Open review threads (${threads.length})
+## ${retest ? 'Review threads to re-test' : 'Open review threads'} (${threads.length})
 
 ${blocks}
 `;

@@ -6,65 +6,116 @@
 <title>Auto PR Review</title>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --text: #1d2026; --muted: #667085; --line: #e4e7ec;
-    --red: #c00000; --green: #1a7f37; --amber: #b54708; --blue: #175cd3; --grey: #667085;
+    --bg: #f4f5f7; --card: #ffffff; --card2: #f9fafb; --text: #1d2026; --muted: #667085; --line: #e4e7ec;
+    --red: #c00000; --red-bg: #fdecec; --green: #1a7f37; --green-bg: #e7f6ec; --amber: #b54708; --amber-bg: #fef4e6;
+    --blue: #175cd3; --blue-bg: #eaf1fd; --grey: #667085; --grey-bg: #f0f1f3;
+    --purple: #6e40c9; --purple-bg: #f1ebfc;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #111317; --card: #1a1d23; --text: #e6e8eb; --muted: #98a2b3; --line: #2b3038;
-            --red: #ff5a5a; --green: #3fb950; --amber: #f5a524; --blue: #58a6ff; --grey: #98a2b3; }
+    :root { --bg: #0f1115; --card: #181b21; --card2: #1e2229; --text: #e6e8eb; --muted: #98a2b3; --line: #2b3038;
+            --red: #ff6b6b; --red-bg: #3a1b1d; --green: #3fb950; --green-bg: #15301e; --amber: #f5a524; --amber-bg: #372a12;
+            --blue: #58a6ff; --blue-bg: #14263f; --grey: #98a2b3; --grey-bg: #262a31; --shadow: none;
+            --purple: #a371f7; --purple-bg: #2a1f40; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; border-bottom: 3px solid var(--red); background: var(--card); }
-  header h1 { margin: 0; font-size: 18px; }
-  .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
-  .live { color: var(--red); } .dry { color: var(--amber); }
-  .meta { color: var(--muted); font-size: 12px; margin-left: auto; text-align: right; }
-  main { max-width: 1150px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-  .tile .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .tile .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; }
-  section h2 { margin: 0 0 10px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: 12px; border-top: 0; }
   a { color: var(--blue); text-decoration: none; } a:hover { text-decoration: underline; }
-  .s-done { color: var(--green); font-weight: 600; } .s-failed { color: var(--red); font-weight: 600; }
-  .s-skipped { color: var(--grey); } .s-running { color: var(--red); font-weight: 700; } .s-pending { color: var(--amber); font-weight: 600; }
-  .running-card { border-left: 4px solid var(--red); }
-  .empty { color: var(--muted); }
-  .err { color: var(--red); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
-  .small { color: var(--muted); font-size: 12px; }
-  button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+  button { font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--muted); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.ghost { background: transparent; }
+  button.accept { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.accept:hover { filter: brightness(1.08); }
+  button.sm { padding: 3px 10px; font-size: 12px; }
+
+  header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; background: var(--card); border-bottom: 3px solid var(--red); box-shadow: var(--shadow); }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .pill.live { color: var(--red); background: var(--red-bg); } .pill.dry { color: var(--amber); background: var(--amber-bg); }
+  .meta { color: var(--muted); font-size: 12px; margin-left: auto; text-align: right; }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 20px; display: grid; gap: 18px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); border-top: 3px solid var(--c, var(--line)); }
+  .tile .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--c, var(--text)); }
+  .tile .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); }
+  .sec-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .sec-head h2 { margin: 0; font-size: 15px; }
+  .count { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .empty { color: var(--muted); padding: 8px 0; }
+
+  /* "all comments resolved" call-out */
+  .ready { border: 1px solid var(--green); background: var(--green-bg); border-radius: 12px; padding: 16px; }
+  .ready h2 { margin: 0 0 4px; font-size: 15px; color: var(--green); }
+  .ready .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .ready-list { display: grid; gap: 10px; }
+  .ready-item { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .ready-item .check { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; font-weight: 700; }
+  .ready-item .info { flex: 1 1 260px; min-width: 0; }
+  .ready-item .q { font-weight: 600; color: var(--green); font-size: 13px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* PR rows */
+  .rows { display: grid; gap: 8px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line)); border-radius: 10px; background: var(--card2); }
+  .row .title { font-weight: 600; overflow-wrap: anywhere; }
+  .row .sub { color: var(--muted); font-size: 12px; margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .row .side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right; }
+  .row .detail { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 12px; color: var(--muted); }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } .row .side { align-items: flex-start; text-align: left; } }
+
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .b-green { color: var(--green); background: var(--green-bg); } .b-red { color: var(--red); background: var(--red-bg); }
+  .b-amber { color: var(--amber); background: var(--amber-bg); } .b-blue { color: var(--blue); background: var(--blue-bg); }
+  .b-grey { color: var(--grey); background: var(--grey-bg); }
+  .b-purple { color: var(--purple); background: var(--purple-bg); }
+  .tag { padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; border: 1px solid currentColor; }
+
+  .bar { display: inline-flex; width: 140px; height: 7px; border-radius: 99px; overflow: hidden; background: var(--grey-bg); vertical-align: middle; }
+  .bar i { display: block; height: 100%; }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .tabs button { padding: 4px 12px; font-size: 12px; border-radius: 999px; }
+  .tabs button.on { background: var(--text); color: var(--card); border-color: var(--text); }
+  input[type=search] { font: inherit; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); min-width: 180px; }
+
+  .running .row { border-left-color: var(--red); background: var(--red-bg); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red); margin-right: 6px; animation: pulse 1.2s infinite; }
   @keyframes pulse { 50% { opacity: .25; } }
-  .tag { padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid currentColor; }
-  .tag.fu { color: #b45309; }
-  .tag.full { color: #2563eb; }
+  .err { color: var(--red); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .small { color: var(--muted); font-size: 12px; }
+  #toast { position: fixed; right: 20px; bottom: 20px; max-width: 360px; padding: 10px 14px; border-radius: 10px; background: var(--text); color: var(--card); font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.2); opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: none; }
 </style>
 </head>
 <body>
 <header>
   <h1>Auto PR Review</h1>
   <span id="mode" class="pill">...</span>
-  <button id="pollBtn" type="button">Poll now</button>
+  <button id="pollBtn" type="button" class="sm">Poll now</button>
   <div class="meta" id="meta">loading...</div>
 </header>
 <main>
-  <div class="tiles">
-    <div class="tile"><div class="n" id="c-running">-</div><div class="l">Running now</div></div>
-    <div class="tile"><div class="n" id="c-pending">-</div><div class="l">Pending (baaki)</div></div>
-    <div class="tile"><div class="n" id="c-done">-</div><div class="l">Done (ho gaye)</div></div>
-    <div class="tile"><div class="n" id="c-failed">-</div><div class="l">Failed</div></div>
-    <div class="tile"><div class="n" id="c-skipped">-</div><div class="l">Skipped</div></div>
-  </div>
-  <section class="running-card"><h2>Currently running</h2><div id="running"></div></section>
-  <section><h2>Queue</h2><div id="pending"></div></section>
-  <section><h2>Recent reviews</h2><div id="recent"></div></section>
-  <section><h2>Poller</h2><div id="poller"></div></section>
+  <div class="tiles" id="tiles"></div>
+  <div id="ready"></div>
+  <section class="card running"><div class="sec-head"><h2>Currently running</h2><span class="count" id="n-running"></span></div><div id="running"></div></section>
+  <section class="card"><div class="sec-head"><h2>Queue</h2><span class="count" id="n-pending"></span></div><div id="pending"></div></section>
+  <section class="card">
+    <div class="sec-head">
+      <h2>Reviewed PRs</h2><span class="count" id="n-recent"></span>
+      <div class="tabs" id="tabs"></div>
+      <input type="search" id="q" placeholder="Search PR / title / author">
+    </div>
+    <div id="recent"></div>
+  </section>
+  <section class="card"><div class="sec-head"><h2>Poller</h2></div><div id="poller"></div></section>
 </main>
+<div id="toast"></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -76,36 +127,144 @@ const ago = (iso) => {
   if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago';
 };
 const dur = (a, b) => { if (!a) return '-'; const s = Math.round(((b ? Date.parse(b) : Date.now()) - Date.parse(a)) / 1000); return Math.floor(s / 60) + 'm ' + (s % 60) + 's'; };
-const prLink = (p) => `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.repo.split('/')[1])} #${p.number}</a>`;
-const modeTag = (p) => p.mode === 'followup' ? '<span class="tag fu">follow-up</span>' : p.mode === 'full' ? '<span class="tag full">full review</span>' : '<span class="small">-</span>';
-const table = (head, rows) => rows.length ? `<table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">Nothing here.</div>';
+const prRef = (p) => `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.repo.split('/')[1])} #${p.number}</a>`;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const MODE = { full: ['full review', 'var(--blue)'], followup: ['follow-up', 'var(--amber)'], retest: ['re-test', 'var(--green)'], none: ['no AI run', 'var(--grey)'] };
+const modeTag = (m) => MODE[m] ? `<span class="tag" style="color:${MODE[m][1]}">${MODE[m][0]}</span>` : '';
+
+/** What the PR's review comments look like now. Older state entries have no `outcome`, so derive it. */
+function outcomeOf(p) {
+  if (p.status !== 'done') return null;
+  if (p.outcome) return { kind: p.outcome, open: p.openLeft ?? 0 };
+  const f = p.followUp;
+  if (f) { const open = f.partially_addressed + f.not_addressed + (f.notJudged || 0) + (f.unchecked || 0); return { kind: open ? 'open-comments' : 'all-resolved', open }; }
+  if (p.counts) { const n = p.counts.inline + p.counts.unanchored; return { kind: n ? 'changes-requested' : 'clean', open: n }; }
+  return null;
+}
+const canRetest = (o) => o && (o.kind === 'all-resolved' || o.kind === 'clean');
+
+function outcomeBadge(o) {
+  if (!o) return '';
+  if (o.kind === 'all-resolved') return '<span class="badge b-green">&#10003; All comments resolved</span>';
+  if (o.kind === 'clean') return '<span class="badge b-green">&#10003; No issues found</span>';
+  if (o.kind === 'open-comments') return `<span class="badge b-amber">${plural(o.open, 'comment')} still open</span>`;
+  if (o.kind === 'changes-requested') return `<span class="badge b-red">${plural(o.open, 'comment')} posted</span>`;
+  return '';
+}
+const STATUS = { done: 'b-green', failed: 'b-red', skipped: 'b-grey', pending: 'b-amber', running: 'b-red' };
+const statusBadge = (p) => `<span class="badge ${STATUS[p.status] || 'b-grey'}">${esc(p.status)}</span>`;
+
+function progress(p) {
+  const f = p.followUp;
+  if (!f || !f.threads) return '';
+  const w = (n) => (100 * n / f.threads).toFixed(1) + '%';
+  const fixed = f.addressed + f.not_applicable;
+  return `<span><span class="bar" title="${f.addressed} fixed, ${f.not_applicable} n/a, ${f.partially_addressed} partial, ${f.not_addressed} open">`
+    + `<i style="width:${w(fixed)};background:var(--green)"></i><i style="width:${w(f.partially_addressed)};background:var(--amber)"></i><i style="width:${w(f.not_addressed)};background:var(--red)"></i></span>`
+    + ` ${fixed}/${f.threads} fixed${f.partially_addressed ? `, ${f.partially_addressed} partial` : ''}${f.not_addressed ? `, ${f.not_addressed} open` : ''}</span>`;
+}
+
+const isApproved = (p) => p.approved && p.approved.sha === p.reviewedSha;
+const acceptButton = (p) => isApproved(p)
+  ? `<a class="badge b-blue" href="${esc(p.approved.url || p.url)}" target="_blank" rel="noopener" title="Approved ${esc(t(p.approved.at))}">&#10003; Accepted</a>`
+  : `<button type="button" class="accept sm" data-approve="1" data-repo="${esc(p.repo)}" data-number="${p.number}" data-title="${esc(p.title)}"${last?.mode !== 'live' ? ' disabled title="Dry-run mode: nothing is posted to GitHub"' : ' title="Approve this PR on GitHub (as you)."'}>Accept</button>`;
+const retestButtons = (p, primaryLabel = 'Re-review') =>
+  `<div class="actions">${acceptButton(p)}<button type="button" class="primary sm" data-retest="verify" data-repo="${esc(p.repo)}" data-number="${p.number}" title="Check every earlier comment again against the latest code. No new comments are raised.">${primaryLabel}</button>`
+  + `<button type="button" class="ghost sm" data-retest="full" data-repo="${esc(p.repo)}" data-number="${p.number}" title="Run a brand new full review. This can post new comments.">Full re-review</button></div>`;
+
+const FILTERS = [
+  ['all', 'All', () => true],
+  ['open', 'Comments open', (p, o) => o && (o.kind === 'open-comments' || o.kind === 'changes-requested')],
+  ['resolved', 'All resolved', (p, o) => canRetest(o)],
+  ['failed', 'Failed', (p) => p.status === 'failed'],
+  ['skipped', 'Skipped', (p) => p.status === 'skipped'],
+  ['merged', 'Merged', () => true], // uses last.merged instead of last.recent
+];
+let filter = 'all', last = null;
+
+function renderRecent() {
+  if (!last) return;
+  const q = $('q').value.trim().toLowerCase();
+  const items = last.recent.map((p) => [p, outcomeOf(p)]);
+  const tabCount = (k, fn) => k === 'merged' ? last.merged.length : items.filter(([p, o]) => fn(p, o)).length;
+  $('tabs').innerHTML = FILTERS.map(([k, label, fn]) => `<button type="button" data-filter="${k}" class="${k === filter ? 'on' : ''}">${label} ${tabCount(k, fn)}</button>`).join('');
+  if (filter === 'merged') return renderMerged(q);
+  const fn = FILTERS.find(([k]) => k === filter)[2];
+  const shown = items.filter(([p, o]) => fn(p, o) && (!q || `${p.repo} #${p.number} ${p.title} ${p.author}`.toLowerCase().includes(q)));
+  $('n-recent').textContent = `${shown.length} shown`;
+  $('recent').innerHTML = shown.length ? `<div class="rows">${shown.map(([p, o]) => {
+    const color = p.status === 'failed' ? 'var(--red)' : p.status === 'skipped' ? 'var(--grey)' : !o ? 'var(--line)'
+      : canRetest(o) ? 'var(--green)' : o.kind === 'open-comments' ? 'var(--amber)' : 'var(--red)';
+    let links = '';
+    if (p.reviewUrl) links = `<a href="${esc(p.reviewUrl)}" target="_blank" rel="noopener">view review &rarr;</a>`;
+    else if (p.dryRun) links = `<span title="${esc(p.payloadFile || '')}">dry-run (not posted)</span>`;
+    const inline = p.counts && !p.followUp ? `${p.counts.inline} inline${p.counts.unanchored ? ` + ${p.counts.unanchored} in body` : ''}` : '';
+    const gh = p.existingThreads ? `GitHub threads: ${p.existingThreads.open} open / ${p.existingThreads.total}` : '';
+    return `<div class="row" style="--c:${color}">
+      <div><div class="title">${esc(p.title)}</div>
+        <div class="sub">${prRef(p)}<span>by ${esc(p.author || '?')}</span>${modeTag(p.mode)}${p.engine ? `<span>${esc(p.engine)}</span>` : ''}<span>${ago(p.finishedAt)}</span>${p.startedAt ? `<span>took ${dur(p.startedAt, p.finishedAt)}</span>` : ''}</div></div>
+      <div class="side">${o ? outcomeBadge(o) : statusBadge(p)}${canRetest(o) ? retestButtons(p) : ''}</div>
+      <div class="detail">${progress(p)}${inline ? `<span>${inline}</span>` : ''}${gh ? `<span>${gh}</span>` : ''}${links ? `<span>${links}</span>` : ''}${p.skipReason ? `<span>${esc(p.skipReason)}</span>` : ''}
+        ${p.status === 'failed' && p.error ? `<div class="err">${esc(p.error.slice(0, 400))}</div>` : ''}</div>
+    </div>`;
+  }).join('')}</div>` : '<div class="empty">Nothing here.</div>';
+}
+
+function renderMerged(q) {
+  const shown = last.merged.filter((p) => !q || `${p.repo} #${p.number} ${p.title} ${p.author}`.toLowerCase().includes(q));
+  $('n-recent').textContent = `${shown.length} shown`;
+  $('recent').innerHTML = shown.length ? `<div class="rows">${shown.map((p) => {
+    const o = outcomeOf(p);
+    return `<div class="row" style="--c:var(--purple)">
+      <div><div class="title">${esc(p.title)}</div>
+        <div class="sub">${prRef(p)}<span>by ${esc(p.author || '?')}</span>${p.mergedBy ? `<span>merged by ${esc(p.mergedBy)}</span>` : ''}<span>merged ${p.mergedAt ? ago(p.mergedAt) : '-'}</span></div></div>
+      <div class="side"><span class="badge b-purple">Merged</span>${isApproved(p) ? '<span class="badge b-blue">&#10003; Accepted</span>' : ''}${o ? outcomeBadge(o) : ''}</div>
+      <div class="detail">${progress(p)}${p.existingThreads ? `<span>GitHub threads: ${p.existingThreads.open} open / ${p.existingThreads.total}</span>` : ''}${p.reviewUrl ? `<span><a href="${esc(p.reviewUrl)}" target="_blank" rel="noopener">view review &rarr;</a></span>` : ''}${p.mergedAt ? `<span>${t(p.mergedAt)}</span>` : ''}</div>
+    </div>`;
+  }).join('')}</div>` : '<div class="empty">No merged PRs yet.</div>';
+}
 
 async function refresh() {
   let s;
   try { s = await (await fetch('/api/status', { cache: 'no-store' })).json(); }
   catch { $('meta').textContent = 'Cannot reach auto-pr-review (is it running?)'; return; }
+  last = s;
   $('mode').textContent = s.mode === 'live' ? 'LIVE - posts reviews' : 'DRY-RUN - nothing posted';
   $('mode').className = 'pill ' + (s.mode === 'live' ? 'live' : 'dry');
-  $('meta').innerHTML = `GitHub: <b>${esc(s.login || '?')}</b> | repos: ${esc(s.repos.join(', '))}<br>last poll ${ago(s.lastPollAt)} | next ${s.nextPollAt ? t(s.nextPollAt) : '-'}${s.polling ? ' | polling...' : ''}`;
-  for (const k of Object.keys(s.counts)) $('c-' + k).textContent = s.counts[k];
+  $('meta').innerHTML = `GitHub: <b>${esc(s.login || '?')}</b> | ${esc(s.repos.join(', '))}<br>last poll ${ago(s.lastPollAt)} | next ${s.nextPollAt ? new Date(s.nextPollAt).toLocaleTimeString() : '-'}${s.polling ? ' | polling...' : ''}`;
 
-  $('running').innerHTML = table(['PR', 'Title', 'Mode', 'Engine', 'Step', 'Started', 'Elapsed'], s.running.map((p) =>
-    `<tr><td><span class="dot"></span>${prLink(p)}</td><td>${esc(p.title)}<div class="small">by ${esc(p.author)}</div></td><td>${modeTag(p)}</td><td class="s-running">${esc(p.engine || '-')}</td><td>${esc(p.step || '')}</td><td>${t(p.startedAt)}</td><td>${dur(p.startedAt)}</td></tr>`));
+  const outs = s.recent.map(outcomeOf);
+  const resolved = s.recent.filter((p, i) => outs[i]?.kind === 'all-resolved');
+  const open = outs.filter((o) => o && (o.kind === 'open-comments' || o.kind === 'changes-requested')).length;
+  const tiles = [
+    ['Running now', s.counts.running, 'var(--red)'], ['Queue (baaki)', s.counts.pending, 'var(--amber)'],
+    ['Comments open', open, 'var(--amber)'], ['All resolved', resolved.length, 'var(--green)'],
+    ['Done', s.counts.done, 'var(--blue)'], ['Merged', s.merged.length, 'var(--purple)'], ['Failed', s.counts.failed, s.counts.failed ? 'var(--red)' : 'var(--grey)'],
+  ];
+  $('tiles').innerHTML = tiles.map(([l, n, c]) => `<div class="tile" style="--c:${c}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
 
-  $('pending').innerHTML = table(['PR', 'Title', 'Why', 'Queued', 'Note'], s.pending.map((p) =>
-    `<tr><td>${prLink(p)}</td><td>${esc(p.title)}</td><td class="small">${esc((p.matchedBy || (p.manual ? ['manual'] : [])).join(', '))}</td><td>${ago(p.queuedAt)}</td><td class="small">${p.nextRetryAt ? 'retry at ' + t(p.nextRetryAt) : ''}${p.error ? `<div class="err">${esc(p.error.slice(0, 300))}</div>` : ''}</td></tr>`));
+  $('ready').innerHTML = resolved.length ? `<div class="ready">
+    <h2>&#10003; ${plural(resolved.length, 'PR')}: saare comments solve ho gaye</h2>
+    <div class="sub">Koi naya review apne aap nahi chalega. <b>Accept</b> PR ko GitHub pe approve kar deta hai. <b>Re-review</b> har purane comment ko latest code pe dobara check karta hai (naye comments nahi aate). <b>Full re-review</b> poora naya review chalata hai.</div>
+    <div class="ready-list">${resolved.map((p) => `<div class="ready-item"><div class="check">&#10003;</div>
+      <div class="info"><div class="title"><b>${esc(p.title)}</b></div><div class="small">${prRef(p)} &middot; by ${esc(p.author || '?')} &middot; ${p.existingThreads ? plural(p.existingThreads.total, 'comment') + ' &middot; ' : ''}checked ${ago(p.finishedAt)}</div>
+      <div class="q">Comments solve ho gaye &mdash; accept karna hai ya re-review?</div></div>
+      ${retestButtons(p)}</div>`).join('')}</div></div>` : '';
 
-  $('recent').innerHTML = table(['PR', 'Title', 'Status', 'Mode', 'Engine', 'Comments', 'Finished', 'Took', 'Result'], s.recent.map((p) => {
-    const f = p.followUp;
-    const c = f ? `${f.threads} old thread(s): ${f.addressed} fixed, ${f.partially_addressed} partial, ${f.not_addressed} open, ${f.not_applicable} n/a<div class="small">${f.replies} repl${f.replies === 1 ? 'y' : 'ies'}${p.dryRun ? ' prepared' : ' posted'}</div>`
-      : p.counts ? `${p.counts.inline} inline${p.counts.unanchored ? ` + ${p.counts.unanchored} in body` : ''}` : '-';
-    let res = '';
-    if (p.reviewUrl) res = `<a href="${esc(p.reviewUrl)}" target="_blank" rel="noopener">view review</a>`;
-    else if (p.dryRun) res = `<span class="small">dry-run, saved: ${esc(p.payloadFile || '')}</span>`;
-    if (p.skipReason) res += `<div class="small">${esc(p.skipReason)}</div>`;
-    if (p.status === 'failed' && p.error) res += `<div class="err">${esc(p.error.slice(0, 400))}</div>`;
-    return `<tr><td>${prLink(p)}</td><td>${esc(p.title)}</td><td class="s-${p.status}">${p.status}</td><td>${modeTag(p)}</td><td>${esc(p.engine || '-')}</td><td>${c}</td><td>${ago(p.finishedAt)}</td><td>${dur(p.startedAt, p.finishedAt)}</td><td>${res}</td></tr>`;
-  }));
+  $('n-running').textContent = s.running.length ? `${s.running.length}` : '';
+  $('running').innerHTML = s.running.length ? `<div class="rows">${s.running.map((p) => `<div class="row">
+    <div><div class="title"><span class="dot"></span>${esc(p.title)}</div><div class="sub">${prRef(p)}<span>by ${esc(p.author || '?')}</span>${modeTag(p.mode)}</div></div>
+    <div class="side"><span class="badge b-red">${esc(p.step || 'starting')}</span><span class="small">${esc(p.engine || '')} &middot; ${dur(p.startedAt)}</span></div></div>`).join('')}</div>`
+    : '<div class="empty">Nothing running.</div>';
+
+  $('n-pending').textContent = s.pending.length ? `${s.pending.length}` : '';
+  $('pending').innerHTML = s.pending.length ? `<div class="rows">${s.pending.map((p) => `<div class="row" style="--c:var(--amber)">
+    <div><div class="title">${esc(p.title)}</div><div class="sub">${prRef(p)}<span>${esc((p.matchedBy || (p.manual ? ['manual'] : [])).join(', '))}</span>${p.retest ? `<span class="tag" style="color:var(--green)">${p.retest === 'full' ? 'full re-review' : 're-test'}</span>` : ''}<span>queued ${ago(p.queuedAt)}</span></div></div>
+    <div class="side">${p.nextRetryAt ? `<span class="small">retry at ${t(p.nextRetryAt)}</span>` : '<span class="badge b-amber">waiting</span>'}</div>
+    ${p.error ? `<div class="detail"><div class="err">${esc(p.error.slice(0, 300))}</div></div>` : ''}</div>`).join('')}</div>`
+    : '<div class="empty">Queue is empty.</div>';
+
+  renderRecent();
 
   const cds = Object.entries(s.cooldowns).filter(([, v]) => Date.parse(v) > Date.now()).map(([k, v]) => `${k} paused (limit) until ${t(v)}`);
   $('poller').innerHTML = `<div class="small">Searches: ${esc(s.queries.join(' | '))} every ${s.pollIntervalMinutes} min. Process started ${t(s.startedAt)}.</div>`
@@ -113,7 +272,40 @@ async function refresh() {
     + (s.lastPollError ? `<div class="err">Last poll error: ${esc(s.lastPollError)}</div>` : '')
     + (s.filtered.length ? `<div class="small" style="margin-top:6px">Ignored on last poll: ${s.filtered.map((f) => `#${f.number} (${esc(f.reason)})`).join(', ')}</div>` : '');
 }
-$('pollBtn').onclick = async () => { await fetch('/api/poll', { method: 'POST' }); setTimeout(refresh, 1500); };
+
+let toastTimer;
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3500); }
+
+document.addEventListener('click', async (e) => {
+  const f = e.target.closest('[data-filter]');
+  if (f) { filter = f.dataset.filter; renderRecent(); return; }
+  const a = e.target.closest('[data-approve]');
+  if (a) {
+    const { repo, number, title } = a.dataset;
+    if (!confirm(`PR #${number} "${title}" ko GitHub pe APPROVE karna hai?`)) return;
+    a.disabled = true;
+    try {
+      const r = await fetch('/api/approve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ repo, number: Number(number) }) });
+      const j = await r.json().catch(() => ({}));
+      toast(r.ok ? `PR #${number} approved` : `Could not approve: ${j.error || r.status}`);
+    } catch { toast('Could not reach auto-pr-review'); }
+    refresh();
+    return;
+  }
+  const b = e.target.closest('[data-retest]');
+  if (!b) return;
+  const { retest: kind, repo, number } = b.dataset;
+  if (kind === 'full' && !confirm(`PR #${number} ka poora naya review chalana hai? Isse naye comments aa sakte hain.`)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch('/api/retest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ repo, number: Number(number), kind }) });
+    const j = await r.json().catch(() => ({}));
+    toast(r.ok ? `PR #${number} queued for ${kind === 'full' ? 'full re-review' : 're-review'}` : `Could not queue: ${j.error || r.status}`);
+  } catch { toast('Could not reach auto-pr-review'); }
+  refresh();
+});
+$('q').addEventListener('input', renderRecent);
+$('pollBtn').onclick = async () => { await fetch('/api/poll', { method: 'POST' }); toast('Polling GitHub...'); setTimeout(refresh, 1500); };
 refresh();
 setInterval(refresh, 3000);
 </script>

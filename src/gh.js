@@ -26,10 +26,11 @@ export async function prDiff(repo, number) {
   return { ok: true, diff: r.stdout };
 }
 
-/** True if a review carrying our marker for this head SHA is already on the PR. */
-export async function hasMarkerReview(repo, number, sha) {
+/** All reviews on the PR that carry our marker: [{sha, mode}] (mode = full | followup | retest). */
+export async function markerReviews(repo, number) {
   const out = await runOk('gh', ['api', '--paginate', `repos/${repo}/pulls/${number}/reviews`, '--jq', '.[].body']);
-  return out.includes(`<!-- auto-pr-review sha=${sha}`);
+  return [...out.matchAll(/<!-- auto-pr-review sha=([0-9a-f]+)(?: engine=\S+)?(?: mode=(\w+))? -->/g)]
+    .map((m) => ({ sha: m[1], mode: m[2] || 'full' }));
 }
 
 /** Post one review (event COMMENT). payload = {commit_id, body, event, comments}. */
@@ -73,4 +74,18 @@ export async function postReply(repo, number, commentId, body) {
   if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout).trim() };
   const res = JSON.parse(r.stdout);
   return { ok: true, id: res.id, url: res.html_url };
+}
+
+/** APPROVE the PR at `sha`. Only ever called from the dashboard's Accept button (a human click). */
+export async function approvePr(repo, number, sha, body) {
+  const r = await run('gh', ['api', '--method', 'POST', `repos/${repo}/pulls/${number}/reviews`, '-f', 'event=APPROVE', '-f', `commit_id=${sha}`, '-f', `body=${body}`]);
+  if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout).trim() };
+  const res = JSON.parse(r.stdout);
+  return { ok: true, id: res.id, url: res.html_url };
+}
+
+/** Current lifecycle state of a PR: {state: OPEN|CLOSED|MERGED, mergedAt, closedAt, mergedBy}. */
+export async function prState(repo, number) {
+  const p = JSON.parse(await runOk('gh', ['pr', 'view', String(number), '-R', repo, '--json', 'state,mergedAt,closedAt,mergedBy']));
+  return { state: p.state, mergedAt: p.mergedAt || null, closedAt: p.closedAt || null, mergedBy: p.mergedBy?.login || null };
 }

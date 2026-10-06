@@ -14,11 +14,12 @@
   "reviewNewCommits": true,
   "existingCommentsMode": "review-existing-only",
   "maxFollowUpThreads": 30,
+  "singleFullReview": true,
   "skipDrafts": true,
   "skipOwnPrs": true,
   "maxAttempts": 2,
   "reviewTimeoutMinutes": 25,
-  "maxInlineComments": 15,
+  "maxInlineComments": 40,
   "maxDiffChars": 200000,
   "engineOrder": [
     "claude",

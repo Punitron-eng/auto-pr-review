@@ -12,11 +12,12 @@ const DEFAULTS = {
   reviewNewCommits: true,
   existingCommentsMode: 'review-existing-only', // or 'full' = always do a fresh full review
   maxFollowUpThreads: 30,
+  singleFullReview: true, // after the first full review only follow-ups run; a new full review only from the dashboard
   skipDrafts: true,
   skipOwnPrs: true,
   maxAttempts: 2,
   reviewTimeoutMinutes: 25,
-  maxInlineComments: 15,
+  maxInlineComments: 40,
   maxDiffChars: 200000,
   engineOrder: ['claude', 'opencode'],
   engines: { claude: { maxParallel: 1 }, opencode: { maxParallel: 1 } },

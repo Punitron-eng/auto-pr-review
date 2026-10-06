@@ -43,9 +43,40 @@ function getStatus() {
     counts: { running: count('running'), pending: count('pending'), done: count('done'), failed: count('failed'), skipped: count('skipped') },
     running: prs.filter((p) => p.status === 'running'),
     pending: prs.filter((p) => p.status === 'pending').sort((a, b) => Date.parse(a.queuedAt) - Date.parse(b.queuedAt)),
-    recent: prs.filter((p) => ['done', 'failed', 'skipped'].includes(p.status))
+    recent: prs.filter((p) => ['done', 'failed', 'skipped'].includes(p.status) && p.prState !== 'MERGED')
       .sort((a, b) => Date.parse(b.finishedAt || 0) - Date.parse(a.finishedAt || 0)).slice(0, 50),
+    merged: prs.filter((p) => p.prState === 'MERGED')
+      .sort((a, b) => Date.parse(b.mergedAt || 0) - Date.parse(a.mergedAt || 0)).slice(0, 100),
   };
+}
+
+/** Dashboard Re-test button. kind 'verify' = re-check every earlier comment, 'full' = fresh full review. */
+function requestRetest(repo, number, kind) {
+  if (!['verify', 'full'].includes(kind)) return { code: 400, error: 'kind must be verify or full' };
+  const cur = state.get(repo, number);
+  if (!cur) return { code: 404, error: 'unknown PR' };
+  if (cur.status === 'running' || cur.status === 'pending') return { code: 409, error: 'already queued or running' };
+  state.upsert(repo, number, { status: 'pending', retest: kind, queuedAt: new Date().toISOString(), attempts: 0, error: null, skipReason: null, nextRetryAt: null });
+  log.info(`Re-test (${kind}) requested from the dashboard for ${state.key(repo, number)}`);
+  worker.tick();
+  return { code: 202 };
+}
+
+/** Dashboard Accept button: APPROVE the PR on GitHub, but only at the commit whose comments were checked. */
+async function requestApprove(repo, number) {
+  const cur = state.get(repo, number);
+  if (!cur) return { code: 404, error: 'unknown PR' };
+  if (dryRun) return { code: 409, error: 'dry-run mode: nothing is posted to GitHub' };
+  if (cur.status !== 'done' || !['all-resolved', 'clean'].includes(cur.outcome)) return { code: 409, error: 'comments are not all resolved yet' };
+  let pr;
+  try { pr = await gh.viewPr(repo, number); } catch (err) { return { code: 502, error: err.message.slice(0, 300) }; }
+  if (pr.state !== 'OPEN') return { code: 409, error: `PR is ${pr.state}` };
+  if (cur.reviewedSha && pr.headRefOid !== cur.reviewedSha) return { code: 409, error: `new commits since the last check (${cur.reviewedSha.slice(0, 7)} -> ${pr.headRefOid.slice(0, 7)}) - Re-review first` };
+  const r = await gh.approvePr(repo, number, pr.headRefOid, 'Approved from the auto-pr-review dashboard: all review comments are resolved.');
+  if (!r.ok) { log.warn(`Approve failed for ${state.key(repo, number)}: ${r.error.slice(0, 300)}`); return { code: 502, error: r.error.slice(0, 300) }; }
+  state.upsert(repo, number, { approved: { sha: pr.headRefOid, at: new Date().toISOString(), url: r.url } });
+  log.info(`${state.key(repo, number)} approved from the dashboard: ${r.url}`);
+  return { code: 200 };
 }
 
 async function doPoll() {
@@ -64,7 +95,7 @@ async function preflight() {
 }
 
 async function main() {
-  if (!flag('--no-dashboard')) startDashboard({ cfg, getStatus, pollNow: () => { doPoll(); } });
+  if (!flag('--no-dashboard')) startDashboard({ cfg, getStatus, pollNow: () => { doPoll(); }, retest: requestRetest, approve: requestApprove });
   if (flag('--dashboard-only')) return;
   await preflight();
 

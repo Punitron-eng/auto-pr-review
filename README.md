@@ -81,7 +81,11 @@ port 4545. `--pr` and `--once` runs also serve the dashboard until they exit.
 With `"existingCommentsMode": "review-existing-only"` (default), before reviewing the tool reads the PR's review
 threads via GraphQL (`reviewThreads`, which includes `isResolved` / `isOutdated`):
 
-- **Resolved threads are ignored.** If no unresolved thread is left, a normal full review is done.
+- **Resolved threads are ignored.** If no unresolved thread is left and the PR already had an auto-pr-review
+  (`singleFullReview`, default `true`), **no new review is run** - the PR is shown on the dashboard as
+  "All comments resolved" with a **Re-test** button. A PR only gets a full review when it was never reviewed by the tool.
+- The full review prompt tells the model this is the only full review the PR gets, so it must report every
+  finding in one go (up to `maxInlineComments`, default 40) instead of drip-feeding new comments later.
 - Otherwise the model gets, for each unresolved thread (up to `maxFollowUpThreads`): file, line, the original
   comment and all replies, the code the comment was made on (diff hunk + commit), and the current code at HEAD.
   It must return strict JSON: `{summary, threads:[{id, status, explanation}]}` with status
@@ -93,6 +97,19 @@ threads via GraphQL (`reviewThreads`, which includes `isResolved` / `isOutdated`
   2. one COMMENT review with a summary table, carrying `<!-- auto-pr-review sha=<head> ... mode=followup -->`.
 - It never resolves threads, never approves, never requests changes, and does not add new inline findings.
 - Set `"existingCommentsMode": "full"` to always do a fresh full review instead.
+
+### Re-test (dashboard)
+
+A PR whose comments are all resolved (every thread resolved on GitHub, or every thread judged addressed / no longer
+applicable by the last follow-up) shows up in a green "saare comments solve ho gaye" box with two buttons:
+
+- **Re-test** - checks *every* earlier thread again, including resolved ones, against the latest code, replies in
+  each thread and posts a summary (`mode=retest`). It never adds new comments.
+- **Full re-review** - a brand new full review (asks for confirmation, because it can post new comments).
+
+Both call `POST /api/retest {repo, number, kind: "verify" | "full"}`. While the head commit is unchanged, each poll
+also refreshes the GitHub thread counts of reviewed PRs, so resolving the last thread on GitHub flips the PR to
+"All comments resolved" without a new AI run.
 
 Run folders for follow-ups contain `threads.json`, `prompt.md`, `review.json` and `followup-payload.json`
 (`{replies:[...], review:{...}}` = exactly what is / would be posted).
@@ -148,10 +165,11 @@ reviewer does not read or write the shared ITL memory. If OpenCode ends without 
 | `reviewNewCommits` | re-review when the PR head changes |
 | `existingCommentsMode` | `review-existing-only` (default: PRs with unresolved review threads get a follow-up instead of a full review) or `full` |
 | `maxFollowUpThreads` | max open threads checked in one follow-up (default 30) |
+| `singleFullReview` | `true` (default): after the tool's first review, new commits only get follow-ups; with nothing open, no review runs (use Re-test on the dashboard) |
 | `skipDrafts`, `skipOwnPrs` | filters |
 | `maxAttempts` | tries per commit before marking it failed (retry after 5 min) |
 | `reviewTimeoutMinutes` | kill an AI run after this long |
-| `maxInlineComments` | cap on inline comments per review |
+| `maxInlineComments` | cap on inline comments per review (default 40; extra findings go into the review body) |
 | `maxDiffChars` | diff size put into the prompt (the model can run `git diff` for the rest) |
 | `engineOrder`, `engines.*` | engine order and per-engine settings (`command` overrides the executable path) |
 | `window.mode` | `wt` (default), `powershell`, or `hidden` |
